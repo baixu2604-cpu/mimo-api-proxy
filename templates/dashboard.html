@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mimo API Proxy - 管理面板</title>
+    <style>
+        :root {
+            --bg: #0f0f13; --surface: #1a1a24; --surface2: #222233;
+            --border: rgba(255,255,255,0.08); --text: #e4e4e7;
+            --text2: #a1a1aa; --accent: #6366f1; --accent2: #8b5cf6;
+            --green: #22c55e; --red: #ef4444; --yellow: #eab308; --blue: #3b82f6;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+        /* Layout */
+        .sidebar {
+            position: fixed; left: 0; top: 0; bottom: 0; width: 240px;
+            background: var(--surface); border-right: 1px solid var(--border);
+            padding: 24px 16px; display: flex; flex-direction: column; z-index: 10;
+        }
+        .sidebar h2 { color: #fff; font-size: 20px; padding: 0 8px; margin-bottom: 32px; }
+        .sidebar h2 span { color: var(--accent); }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+            border-radius: 10px; cursor: pointer; transition: 0.2s; color: var(--text2);
+            font-size: 14px; margin-bottom: 4px;
+        }
+        .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.1); color: var(--accent); }
+        .nav-item .icon { font-size: 18px; }
+
+        .main { margin-left: 240px; padding: 32px; min-height: 100vh; }
+
+        /* Stats Cards */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+            padding: 24px; transition: 0.3s;
+        }
+        .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .stat-card .label { color: var(--text2); font-size: 13px; margin-bottom: 8px; }
+        .stat-card .value { font-size: 32px; font-weight: 700; color: #fff; }
+        .stat-card .sub { color: var(--text2); font-size: 12px; margin-top: 4px; }
+
+        /* Sections */
+        .section {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px; margin-bottom: 24px;
+        }
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+        }
+        .section-header h3 { font-size: 18px; color: #fff; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px 16px; color: var(--text2); font-size: 12px; font-weight: 600;
+             text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        tr:hover { background: rgba(99,102,241,0.04); }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px; border-radius: 10px; border: none; cursor: pointer;
+            font-size: 13px; font-weight: 500; transition: 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent2); }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--red); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        /* Badges */
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+        .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+        .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 20px; padding: 32px; width: 480px; max-width: 90vw;
+        }
+        .modal h3 { margin-bottom: 20px; color: #fff; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; color: var(--text2); font-size: 13px; margin-bottom: 6px; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px 14px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--surface2);
+            color: var(--text); font-size: 14px; outline: none;
+        }
+        .form-group input:focus { border-color: var(--accent); }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+        /* Log Detail */
+        .log-detail { display: none; }
+        .log-detail.show { display: block; }
+        .log-content {
+            background: var(--surface2); border-radius: 10px; padding: 16px;
+            font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px;
+            white-space: pre-wrap; word-break: break-all; max-height: 400px;
+            overflow-y: auto; line-height: 1.6; margin-top: 8px;
+        }
+        .log-content .role { color: var(--accent); font-weight: 600; }
+        .log-content .response { color: var(--green); }
+
+        /* Pagination */
+        .pagination { display: flex; gap: 8px; justify-content: center; margin-top: 20px; }
+        .pagination button {
+            padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px;
+        }
+        .pagination button.active { background: var(--accent); border-color: var(--accent); }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Copy tooltip */
+        .copy-btn { cursor: pointer; color: var(--text2); transition: 0.2s; }
+        .copy-btn:hover { color: var(--accent); }
+
+        /* Tabs */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; }
+        .tab {
+            padding: 8px 18px; border-radius: 10px; cursor: pointer;
+            font-size: 14px; color: var(--text2); transition: 0.2s;
+        }
+        .tab.active { background: rgba(99,102,241,0.15); color: var(--accent); }
+        .tab:hover { color: var(--text); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 16px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Date filter */
+        .filter-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .filter-bar input, .filter-bar select {
+            padding: 8px 12px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface2);
+            color: var(--text); font-size: 13px;
+        }
+
+        /* Empty state */
+        .empty { text-align: center; padding: 40px; color: var(--text2); }
+        .empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h2>🔮 <span>mimo</span> Proxy</h2>
+        <div class="nav-item active" onclick="switchTab('overview')">
+            <span class="icon">📊</span> 使用概览
+        </div>
+        <div class="nav-item" onclick="switchTab('users')">
+            <span class="icon">👥</span> 用户管理
+        </div>
+        <div class="nav-item" onclick="switchTab('logs')">
+            <span class="icon">📋</span> 请求日志
+        </div>
+        <div style="flex:1"></div>
+        <div class="nav-item" onclick="switchTab('settings')">
+            <span class="icon">⚙️</span> 使用说明
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-panel active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="label">总请求数</div>
+                    <div class="value">{{ stats.total_calls }}</div>
+                    <div class="sub">全部累计</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">今日请求</div>
+                    <div class="value">{{ stats.today_calls }}</div>
+                    <div class="sub">今天</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">活跃用户</div>
+                    <div class="value">{{ stats.active_users }}</div>
+                    <div class="sub">已启用</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">总 Token</div>
+                    <div class="value">{{ "{:,}".format(stats.total_tokens) }}</div>
+                    <div class="sub">累计消耗</div>
+                </div>
+            </div>
+
+            <!-- Per-user stats -->
+            <div class="section">
+                <div class="section-header">
+                    <h3>👥 用户使用情况（近7天）</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr><th>用户</th><th>子Key</th><th>请求数</th><th>Token 消耗</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for u in stats.per_user %}
+                        <tr>
+                            <td>{{ u.name }}</td>
+                            <td><code>{{ u.sub_key[:12] }}...</code></td>
+                            <td>{{ u.calls }}</td>
+                            <td>{{ "{:,}".format(u.tokens or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not stats.per_user %}
+                        <tr><td colspan="4" class="empty"><div class="icon">📭</div>暂无数据</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Model stats -->
+            <div class="section">
+                <div class="section-header">
+                    <h3>🤖 模型使用分布</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr><th>模型</th><th>请求次数</th><th>Token 消耗</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for m in stats.per_model %}
+                        <tr>
+                            <td><code>{{ m.model }}</code></td>
+                            <td>{{ m.calls }}</td>
+                            <td>{{ "{:,}".format(m.tokens or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not stats.per_model %}
+                        <tr><td colspan="3" class="empty"><div class="icon">📭</div>暂无数据</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="tab-users" class="tab-panel">
+            <div class="section">
+                <div class="section-header">
+                    <h3>👥 用户管理</h3>
+                    <button class="btn btn-primary" onclick="showCreateUser()">+ 创建用户</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr><th>名称</th><th>子Key</th><th>状态</th><th>调用限制</th><th>已调用</th><th>Token</th><th>创建时间</th><th>操作</th></tr>
+                    </thead>
+                    <tbody id="users-table">
+                        {% for u in users %}
+                        <tr data-id="{{ u.id }}">
+                            <td>{{ u.name }}</td>
+                            <td>
+                                <code class="sub-key-display">{{ u.sub_key }}</code>
+                                <span class="copy-btn" onclick="copyKey('{{ u.sub_key }}')" title="复制">📋</span>
+                            </td>
+                            <td>
+                                {% if u.is_active %}
+                                <span class="badge badge-green">启用</span>
+                                {% else %}
+                                <span class="badge badge-red">禁用</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ u.max_calls if u.max_calls > 0 else '无限' }}</td>
+                            <td>{{ u.total_calls }}</td>
+                            <td>{{ "{:,}".format(u.total_tokens_used or 0) }}</td>
+                            <td>{{ u.created_at }}</td>
+                            <td>
+                                <button class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-primary{% endif %}"
+                                        onclick="toggleUser({{ u.id }}, {{ 0 if u.is_active else 1 }})">
+                                    {{ '禁用' if u.is_active else '启用' }}
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteUser({{ u.id }}, '{{ u.name }}')">删除</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not users %}
+                        <tr><td colspan="8" class="empty"><div class="icon">👤</div>还没有用户，点击上方按钮创建</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="tab-logs" class="tab-panel">
+            <div class="section">
+                <div class="section-header">
+                    <h3>📋 请求日志</h3>
+                    <div class="filter-bar">
+                        <select id="log-user-filter" onchange="loadLogs(1)">
+                            <option value="">全部用户</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="date" id="log-start-date" onchange="loadLogs(1)">
+                        <input type="date" id="log-end-date" onchange="loadLogs(1)">
+                        <button class="btn btn-sm btn-primary" onclick="loadLogs(1)">筛选</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr><th>时间</th><th>用户</th><th>模型</th><th>提示词</th><th>Token</th><th>耗时</th><th>状态</th><th>详情</th></tr>
+                    </thead>
+                    <tbody id="logs-table"></tbody>
+                </table>
+                <div class="pagination" id="logs-pagination"></div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="tab-settings" class="tab-panel">
+            <div class="section">
+                <div class="section-header"><h3>📖 使用说明</h3></div>
+                <div style="line-height: 1.8; color: var(--text2);">
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">1. 启动服务</h4>
+                    <div class="log-content" style="color: var(--text);">双击 start.bat 一键启动
+或手动: set UPSTREAM_API_KEY=你的密钥 && python main.py</div>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">2. 让其他人访问（内网穿透）</h4>
+                    <p>如果需要让其他人从他们的电脑访问，需要做内网穿透：</p>
+                    <div class="log-content" style="color: var(--text);"># 方式一：localtunnel（免费，无需注册）
+npm install -g localtunnel
+lt --port 8800
+# 会显示公网地址如 https://xxx.loca.lt
+
+# 方式二：ngrok（更稳定，需免费注册）
+# 1. 访问 https://ngrok.com 注册
+# 2. ngrok config add-authtoken YOUR_TOKEN
+# 3. ngrok http 8800</div>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">3. 给用户分配子Key</h4>
+                    <p>在「用户管理」页面创建用户，系统会自动生成 <code>sk-xxx</code> 格式的子Key，把这个子Key给对方即可。</p>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">4. 用户调用方式 — OpenAI 格式</h4>
+                    <div class="log-content" style="color: var(--text);">from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://你的公网地址/v1",
+    api_key="sk-用户的子Key"
+)
+
+response = client.chat.completions.create(
+    model="mimo-v2.5",
+    messages=[{"role": "user", "content": "你好"}]
+)</div>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">5. 用户调用方式 — Claude 格式</h4>
+                    <div class="log-content" style="color: var(--text);">import anthropic
+
+client = anthropic.Anthropic(
+    base_url="http://你的IP:8800",
+    api_key="sk-用户的子Key"
+)
+
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "你好"}]
+)</div>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">5. curl 示例</h4>
+                    <div class="log-content" style="color: var(--text);"># OpenAI 格式
+curl http://你的IP:8800/v1/chat/completions \
+  -H "Authorization: Bearer sk-用户的子Key" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "你好"}]}'
+
+# Claude 格式
+curl http://你的IP:8800/v1/messages \
+  -H "x-api-key: sk-用户的子Key" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "你好"}]}'</div>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">6. 环境变量</h4>
+                    <table>
+                        <tr><th>变量</th><th>说明</th><th>默认值</th></tr>
+                        <tr><td><code>UPSTREAM_API_KEY</code></td><td>你的真实 API 密钥（OpenAI 或 Claude）</td><td>（必填）</td></tr>
+                        <tr><td><code>OPENAI_BASE_URL</code></td><td>OpenAI 上游地址</td><td>https://token-plan-cn.xiaomimimo.com/v1</td></tr>
+                        <tr><td><code>CLAUDE_BASE_URL</code></td><td>Claude 上游地址</td><td>https://token-plan-cn.xiaomimimo.com/anthropic</td></tr>
+                        <tr><td><code>CLAUDE_VERSION</code></td><td>Claude API 版本</td><td>2023-06-01</td></tr>
+                        <tr><td><code>ADMIN_TOKEN</code></td><td>管理面板密码</td><td>admin123</td></tr>
+                        <tr><td><code>PROXY_PORT</code></td><td>代理服务端口</td><td>8800</td></tr>
+                    </table>
+
+                    <h4 style="color: #fff; margin: 16px 0 8px;">7. 工作原理</h4>
+                    <p>代理自动检测用户请求的协议格式：</p>
+                    <ul style="padding-left: 20px; margin-top: 8px;">
+                        <li>有 <code>x-api-key</code> header 或访问 <code>/v1/messages</code> → <strong>Claude 协议</strong></li>
+                        <li>有 <code>Authorization: Bearer</code> header → <strong>OpenAI 协议</strong></li>
+                    </ul>
+                    <p style="margin-top: 8px;">用户的子Key会被替换成你的真实密钥后转发到上游 API，所有提示词和回复都会被记录。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal-overlay" id="create-user-modal">
+        <div class="modal">
+            <h3>创建新用户</h3>
+            <div class="form-group">
+                <label>用户名称</label>
+                <input type="text" id="new-user-name" placeholder="例如：张三">
+            </div>
+            <div class="form-group">
+                <label>调用次数限制（0 = 不限制）</label>
+                <input type="number" id="new-user-max-calls" value="0" min="0">
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal('create-user-modal')">取消</button>
+                <button class="btn btn-primary" onclick="createUser()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Detail Modal -->
+    <div class="modal-overlay" id="log-detail-modal">
+        <div class="modal" style="width: 700px;">
+            <h3>请求详情</h3>
+            <div id="log-detail-content"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal('log-detail-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Key Modal -->
+    <div class="modal-overlay" id="new-key-modal">
+        <div class="modal">
+            <h3>✅ 用户创建成功</h3>
+            <p style="color: var(--text2); margin-bottom: 16px;">请复制以下子Key并发送给用户，此Key不会再次显示：</p>
+            <div class="log-content" id="new-key-display" style="text-align: center; font-size: 18px; color: var(--green);"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="copyNewKey()">复制</button>
+                <button class="btn" onclick="closeModal('new-key-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        function switchTab(name) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            event.currentTarget.classList.add('active');
+            if (name === 'logs') loadLogs(1);
+        }
+
+        // Modal
+        function showCreateUser() { document.getElementById('create-user-modal').classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        // Copy
+        function copyKey(key) {
+            navigator.clipboard.writeText(key);
+            event.currentTarget.textContent = '✅';
+            setTimeout(() => event.currentTarget.textContent = '📋', 1500);
+        }
+
+        let newKeyValue = '';
+        function copyNewKey() {
+            navigator.clipboard.writeText(newKeyValue);
+        }
+
+        // Create user
+        async function createUser() {
+            const name = document.getElementById('new-user-name').value.trim();
+            const maxCalls = parseInt(document.getElementById('new-user-max-calls').value) || 0;
+            if (!name) return alert('请输入用户名');
+
+            const resp = await fetch('/admin/api/users', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, max_calls: maxCalls})
+            });
+            if (resp.ok) {
+                const user = await resp.json();
+                newKeyValue = user.sub_key;
+                document.getElementById('new-key-display').textContent = user.sub_key;
+                closeModal('create-user-modal');
+                document.getElementById('new-key-modal').classList.add('show');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                alert('创建失败');
+            }
+        }
+
+        // Toggle user
+        async function toggleUser(id, active) {
+            await fetch(`/admin/api/users/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({is_active: active})
+            });
+            location.reload();
+        }
+
+        // Delete user
+        async function deleteUser(id, name) {
+            if (!confirm(`确定删除用户「${name}」？所有请求日志也将被删除。`)) return;
+            await fetch(`/admin/api/users/${id}`, {method: 'DELETE'});
+            location.reload();
+        }
+
+        // Load logs
+        let currentLogPage = 1;
+        async function loadLogs(page) {
+            currentLogPage = page;
+            const userId = document.getElementById('log-user-filter').value;
+            const startDate = document.getElementById('log-start-date').value;
+            const endDate = document.getElementById('log-end-date').value;
+
+            let url = `/admin/api/logs?page=${page}&page_size=50`;
+            if (userId) url += `&user_id=${userId}`;
+            if (startDate) url += `&start_date=${startDate}`;
+            if (endDate) url += `&end_date=${endDate}`;
+
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const tbody = document.getElementById('logs-table');
+
+            if (data.logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty"><div class="icon">📭</div>暂无日志</td></tr>';
+                document.getElementById('logs-pagination').innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = data.logs.map(log => `
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;color:var(--text2)">${log.created_at}</td>
+                    <td>${log.user_name}</td>
+                    <td><code style="font-size:12px">${log.model || '-'}</code></td>
+                    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(log.request_body || '').substring(0, 80)}</td>
+                    <td>${log.total_tokens || 0}</td>
+                    <td>${log.latency_ms}ms</td>
+                    <td><span class="badge ${log.status_code < 400 ? 'badge-green' : 'badge-red'}">${log.status_code}</span></td>
+                    <td><button class="btn btn-sm btn-primary" onclick='showLogDetail(${JSON.stringify(log).replace(/'/g, "&#39;")})'>查看</button></td>
+                </tr>
+            `).join('');
+
+            // Pagination
+            const totalPages = Math.ceil(data.total / data.page_size);
+            let pagHtml = '';
+            if (totalPages > 1) {
+                pagHtml += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadLogs(${page-1})">上一页</button>`;
+                for (let i = Math.max(1, page-2); i <= Math.min(totalPages, page+2); i++) {
+                    pagHtml += `<button class="${i === page ? 'active' : ''}" onclick="loadLogs(${i})">${i}</button>`;
+                }
+                pagHtml += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadLogs(${page+1})">下一页</button>`;
+                pagHtml += `<span style="color:var(--text2);font-size:13px;padding:6px">共 ${data.total} 条</span>`;
+            }
+            document.getElementById('logs-pagination').innerHTML = pagHtml;
+        }
+
+        function showLogDetail(log) {
+            const content = document.getElementById('log-detail-content');
+            content.innerHTML = `
+                <div style="margin-bottom:12px;">
+                    <span class="badge badge-blue">${log.user_name}</span>
+                    <span style="color:var(--text2);font-size:12px;margin-left:8px">${log.created_at}</span>
+                    <span style="color:var(--text2);font-size:12px;margin-left:8px">${log.model || '-'}</span>
+                    <span style="color:var(--text2);font-size:12px;margin-left:8px">${log.latency_ms}ms</span>
+                </div>
+                <h4 style="color:var(--accent);margin-bottom:8px">📤 提示词 (Prompt)</h4>
+                <div class="log-content">${escapeHtml(log.request_body || '无')}</div>
+                <h4 style="color:var(--green);margin:16px 0 8px">📥 回复 (Response)</h4>
+                <div class="log-content" style="color:var(--green)">${escapeHtml(log.response_body || '无')}</div>
+                <div style="margin-top:12px;color:var(--text2);font-size:12px">
+                    Token: ${log.prompt_tokens || 0} prompt + ${log.completion_tokens || 0} completion = ${log.total_tokens || 0} total
+                </div>
+            `;
+            document.getElementById('log-detail-modal').classList.add('show');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initial load
+        loadLogs(1);
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mimo-api-proxy
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: UPSTREAM_API_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://token-plan-cn.xiaomimimo.com/v1
+      - key: CLAUDE_BASE_URL
+        value: https://token-plan-cn.xiaomimimo.com/anthropic
+      - key: CLAUDE_VERSION
+        value: 2023-06-01
