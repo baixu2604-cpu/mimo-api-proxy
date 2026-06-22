@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mimo API Proxy - 管理面板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg: #0f0f13; --surface: #1a1a24; --surface2: #222233;
@@ -253,6 +254,18 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Charts -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+                <div class="section">
+                    <div class="section-header"><h3>📈 每日请求数趋势</h3></div>
+                    <canvas id="chart-calls" height="200"></canvas>
+                </div>
+                <div class="section">
+                    <div class="section-header"><h3>📊 每日 Token 消耗</h3></div>
+                    <canvas id="chart-tokens" height="200"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- Users Tab -->
@@ -308,6 +321,7 @@
                 <div class="section-header">
                     <h3>📋 请求日志</h3>
                     <div class="filter-bar">
+                        <input type="text" id="log-keyword" placeholder="🔍 搜索关键词..." style="width:180px" onkeydown="if(event.key==='Enter')loadLogs(1)">
                         <select id="log-user-filter" onchange="loadLogs(1)">
                             <option value="">全部用户</option>
                             {% for u in users %}
@@ -358,7 +372,7 @@ lt --port 8800
                     <div class="log-content" style="color: var(--text);">from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://你的公网地址/v1",
+    base_url="<span class="auto-url">http://你的公网地址</span>/v1",
     api_key="sk-用户的子Key"
 )
 
@@ -371,7 +385,7 @@ response = client.chat.completions.create(
                     <div class="log-content" style="color: var(--text);">import anthropic
 
 client = anthropic.Anthropic(
-    base_url="http://你的IP:8800",
+    base_url="<span class="auto-url">http://你的IP:8800</span>",
     api_key="sk-用户的子Key"
 )
 
@@ -381,21 +395,21 @@ response = client.messages.create(
     messages=[{"role": "user", "content": "你好"}]
 )</div>
 
-                    <h4 style="color: #fff; margin: 16px 0 8px;">5. curl 示例</h4>
+                    <h4 style="color: #fff; margin: 16px 0 8px;">6. curl 示例</h4>
                     <div class="log-content" style="color: var(--text);"># OpenAI 格式
-curl http://你的IP:8800/v1/chat/completions \
+curl <span class="auto-url">http://你的IP:8800</span>/v1/chat/completions \
   -H "Authorization: Bearer sk-用户的子Key" \
   -H "Content-Type: application/json" \
-  -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "你好"}]}'
+  -d '{{"model": "gpt-4", "messages": [{{"role": "user", "content": "你好"}}]}}'
 
 # Claude 格式
-curl http://你的IP:8800/v1/messages \
+curl <span class="auto-url">http://你的IP:8800</span>/v1/messages \
   -H "x-api-key: sk-用户的子Key" \
   -H "Content-Type: application/json" \
   -H "anthropic-version: 2023-06-01" \
-  -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "你好"}]}'</div>
+  -d '{{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{{"role": "user", "content": "你好"}}]}}'</div>
 
-                    <h4 style="color: #fff; margin: 16px 0 8px;">6. 环境变量</h4>
+                    <h4 style="color: #fff; margin: 16px 0 8px;">7. 环境变量</h4>
                     <table>
                         <tr><th>变量</th><th>说明</th><th>默认值</th></tr>
                         <tr><td><code>UPSTREAM_API_KEY</code></td><td>你的真实 API 密钥（OpenAI 或 Claude）</td><td>（必填）</td></tr>
@@ -406,7 +420,7 @@ curl http://你的IP:8800/v1/messages \
                         <tr><td><code>PROXY_PORT</code></td><td>代理服务端口</td><td>8800</td></tr>
                     </table>
 
-                    <h4 style="color: #fff; margin: 16px 0 8px;">7. 工作原理</h4>
+                    <h4 style="color: #fff; margin: 16px 0 8px;">8. 工作原理</h4>
                     <p>代理自动检测用户请求的协议格式：</p>
                     <ul style="padding-left: 20px; margin-top: 8px;">
                         <li>有 <code>x-api-key</code> header 或访问 <code>/v1/messages</code> → <strong>Claude 协议</strong></li>
@@ -534,11 +548,13 @@ curl http://你的IP:8800/v1/messages \
             const userId = document.getElementById('log-user-filter').value;
             const startDate = document.getElementById('log-start-date').value;
             const endDate = document.getElementById('log-end-date').value;
+            const keyword = document.getElementById('log-keyword').value.trim();
 
             let url = `/admin/api/logs?page=${page}&page_size=50`;
             if (userId) url += `&user_id=${userId}`;
             if (startDate) url += `&start_date=${startDate}`;
             if (endDate) url += `&end_date=${endDate}`;
+            if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
 
             const resp = await fetch(url);
             const data = await resp.json();
@@ -605,6 +621,79 @@ curl http://你的IP:8800/v1/messages \
 
         // Initial load
         loadLogs(1);
+
+        // 自动替换使用说明中的占位符地址
+        (function() {
+            const origin = window.location.origin;
+            document.querySelectorAll('.auto-url').forEach(el => {
+                el.textContent = origin;
+                el.style.color = '#22c55e';
+                el.style.fontWeight = '600';
+            });
+        })();
+
+        // Charts
+        (function() {
+            const dailyData = {{ stats.daily | tojson }};
+            if (!dailyData || dailyData.length === 0) return;
+
+            const labels = dailyData.map(d => d.day);
+            const calls = dailyData.map(d => d.calls);
+            const tokens = dailyData.map(d => d.tokens || 0);
+
+            const gridColor = 'rgba(255,255,255,0.06)';
+            const tickColor = '#a1a1aa';
+
+            // 每日请求数折线图
+            new Chart(document.getElementById('chart-calls'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '请求数',
+                        data: calls,
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99,102,241,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#6366f1',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: tickColor } },
+                        y: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true },
+                    }
+                }
+            });
+
+            // 每日 Token 消耗柱状图
+            new Chart(document.getElementById('chart-tokens'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Token',
+                        data: tokens,
+                        backgroundColor: 'rgba(34,197,94,0.6)',
+                        borderColor: '#22c55e',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: tickColor } },
+                        y: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true },
+                    }
+                }
+            });
+        })();
     </script>
 </body>
 </html>

@@ -141,7 +141,7 @@ def get_user_call_count(user_id: int) -> int:
 
 
 def get_logs(user_id: int = None, limit: int = 100, offset: int = 0,
-             start_date: str = None, end_date: str = None) -> list[dict]:
+             start_date: str = None, end_date: str = None, keyword: str = None) -> list[dict]:
     conditions = []
     params = []
     if user_id:
@@ -153,6 +153,10 @@ def get_logs(user_id: int = None, limit: int = 100, offset: int = 0,
     if end_date:
         conditions.append("l.created_at<=?")
         params.append(end_date + " 23:59:59")
+    if keyword:
+        conditions.append("(l.request_body LIKE ? OR l.response_body LIKE ? OR l.model LIKE ?)")
+        kw = f"%{keyword}%"
+        params.extend([kw, kw, kw])
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
     params.extend([limit, offset])
@@ -169,7 +173,8 @@ def get_logs(user_id: int = None, limit: int = 100, offset: int = 0,
         return [dict(r) for r in rows]
 
 
-def get_logs_count(user_id: int = None, start_date: str = None, end_date: str = None) -> int:
+def get_logs_count(user_id: int = None, start_date: str = None, end_date: str = None,
+                   keyword: str = None) -> int:
     conditions = []
     params = []
     if user_id:
@@ -181,6 +186,10 @@ def get_logs_count(user_id: int = None, start_date: str = None, end_date: str = 
     if end_date:
         conditions.append("l.created_at<=?")
         params.append(end_date + " 23:59:59")
+    if keyword:
+        conditions.append("(l.request_body LIKE ? OR l.response_body LIKE ? OR l.model LIKE ?)")
+        kw = f"%{keyword}%"
+        params.extend([kw, kw, kw])
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 

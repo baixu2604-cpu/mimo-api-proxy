@@ -352,12 +352,13 @@ async def api_get_logs(
     page_size: int = Query(50, ge=1, le=200),
     start_date: str = Query(None),
     end_date: str = Query(None),
+    keyword: str = Query(None),
 ):
     verify_admin(request)
     offset = (page - 1) * page_size
     logs = db.get_logs(user_id=user_id, limit=page_size, offset=offset,
-                       start_date=start_date, end_date=end_date)
-    total = db.get_logs_count(user_id=user_id, start_date=start_date, end_date=end_date)
+                       start_date=start_date, end_date=end_date, keyword=keyword)
+    total = db.get_logs_count(user_id=user_id, start_date=start_date, end_date=end_date, keyword=keyword)
     return {"logs": logs, "total": total, "page": page, "page_size": page_size}
 
 
@@ -455,6 +456,16 @@ async def _proxy_stream(target_url, headers, body, user, endpoint,
                          model, prompt_text, start_time, protocol):
     """流式(SSE)代理，兼容 OpenAI 和 Claude 的 SSE 格式"""
     collected_response = []
+    stream_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    # OpenAI: 注入 stream_options 以在流末尾获取 usage
+    if protocol == Protocol.OPENAI:
+        try:
+            body_data = json.loads(body)
+            body_data["stream_options"] = {"include_usage": True}
+            body = json.dumps(body_data).encode("utf-8")
+        except (json.JSONDecodeError, Exception):
+            pass
 
     async def stream_generator():
         try:
@@ -479,12 +490,11 @@ async def _proxy_stream(target_url, headers, body, user, endpoint,
                                     text = delta.get("text", "")
                                     if text:
                                         collected_response.append(text)
-                                # 收集 message_stop 时的 usage
+                                # 从 message_delta 提取 token 用量
                                 if chunk.get("type") == "message_delta":
                                     usage = chunk.get("usage", {})
                                     if usage:
-                                        # 流式结束时记录 usage
-                                        pass
+                                        stream_usage["completion_tokens"] = usage.get("output_tokens", 0)
                             except json.JSONDecodeError:
                                 pass
                             yield line + "\n"
@@ -502,6 +512,12 @@ async def _proxy_stream(target_url, headers, body, user, endpoint,
                                 continue
                             try:
                                 chunk = json.loads(data_str)
+                                # 提取 usage（流末尾的 chunk 包含 usage）
+                                usage = chunk.get("usage")
+                                if usage:
+                                    stream_usage["prompt_tokens"] = usage.get("prompt_tokens", 0)
+                                    stream_usage["completion_tokens"] = usage.get("completion_tokens", 0)
+                                    stream_usage["total_tokens"] = usage.get("total_tokens", 0)
                                 choices = chunk.get("choices", [])
                                 if choices:
                                     delta = choices[0].get("delta", {})
@@ -522,9 +538,9 @@ async def _proxy_stream(target_url, headers, body, user, endpoint,
                     response_body=full_response[:10000],
                     status_code=resp.status_code,
                     model=model,
-                    prompt_tokens=0,
-                    completion_tokens=0,
-                    total_tokens=0,
+                    prompt_tokens=stream_usage["prompt_tokens"],
+                    completion_tokens=stream_usage["completion_tokens"],
+                    total_tokens=stream_usage["total_tokens"],
                     latency_ms=latency,
                 )
         except Exception as e:
@@ -553,6 +569,7 @@ async def startup():
     print(f"  Claude:   http://0.0.0.0:{PROXY_PORT}/v1/messages")
     print(f"  Dashboard: http://0.0.0.0:{PROXY_PORT}/dashboard")
     print(f"  Admin:    {ADMIN_TOKEN}")
+    print(f"  Database: {db.DB_PATH}")
 
 
 @app.on_event("shutdown")
