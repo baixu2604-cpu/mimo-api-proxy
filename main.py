@@ -465,6 +465,8 @@ async def _proxy_stream(target_url, headers, body, user, endpoint,
             body_data = json.loads(body)
             body_data["stream_options"] = {"include_usage": True}
             body = json.dumps(body_data).encode("utf-8")
+            # 移除旧的 Content-Length，让 httpx 重新计算
+            headers.pop("content-length", None)
         except (json.JSONDecodeError, Exception):
             pass
 
