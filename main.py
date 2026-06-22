@@ -323,7 +323,8 @@ async def api_create_user(request: Request):
     name = data.get("name", "").strip()
     if not name:
         raise HTTPException(400, "name is required")
-    sub_key = f"sk-{uuid.uuid4().hex[:24]}"
+    # 支持自定义 sub_key，未提供则自动生成
+    sub_key = data.get("sub_key", "").strip() or f"sk-{uuid.uuid4().hex[:24]}"
     max_calls = int(data.get("max_calls", 0))
     user = db.create_user(sub_key, name, max_calls)
     return user
